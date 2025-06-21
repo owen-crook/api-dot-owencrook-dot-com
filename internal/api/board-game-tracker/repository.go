@@ -18,6 +18,7 @@ import (
 	firestore "cloud.google.com/go/firestore"
 	"github.com/google/uuid"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/gcs"
+	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/helpers"
 )
 
 type Storage struct {
@@ -38,7 +39,7 @@ func (s *Storage) SaveImage(ctx context.Context, image []byte, contentType strin
 	if len(exts) == 0 {
 		return "", errors.New("no file extension found for content type")
 	}
-	ext := exts[0]
+	ext := helpers.NormalizeExtension(exts[0])
 	// generate a uuid for the image to determine the path
 	imageId := uuid.New().String()
 	path := fmt.Sprintf("board-game-tracker/uploads/images/%s%s", imageId, ext)
@@ -50,14 +51,13 @@ func (s *Storage) SaveImage(ctx context.Context, image []byte, contentType strin
 	return res, nil
 }
 
-func (s *Storage) SaveScorecard(ctx context.Context, sc *Scorecard) error {
-	_, err := s.FirestoreClient.Collection("scorecards").Doc(sc.ID).Set(ctx, sc)
+func (s *Storage) SaveImageUploadMetadata(ctx context.Context, metadata *ImageUploadMetadata) error {
+	_, err := s.FirestoreClient.Collection("board-game-image-uploads").Doc(metadata.ID).Set(ctx, metadata)
 	return err
 }
 
-// SavePlayerScoreEntry saves a PlayerScoreEntry to Firestore under the "player_scores" collection.
-func (s *Storage) SavePlayerScoreEntry(ctx context.Context, pse *PlayerScoreEntry) error {
-	_, err := s.FirestoreClient.Collection("player_scores").Doc(pse.Player+"_"+pse.GameID).Set(ctx, pse)
+func (s *Storage) SaveGameScorecardDocument(ctx context.Context, doc *GameScorecardDocument) error {
+	_, err := s.FirestoreClient.Collection("scorecards").Doc(doc.ID).Set(ctx, doc)
 	return err
 }
 

@@ -15,11 +15,15 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
-func HandleParseScoreCard(service *ScoreService) gin.HandlerFunc {
+func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Request.ParseMultipartForm(10 << 20) // 10MB
+
+		// TODO: find a way to inject the game into the request
+		game := "wyrmspan"
 
 		file, _, err := c.Request.FormFile("image")
 		if err != nil {
@@ -33,7 +37,7 @@ func HandleParseScoreCard(service *ScoreService) gin.HandlerFunc {
 		header := make([]byte, 512)
 		n, err := file.Read(header)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read image header"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read image header"}) // TODO: better error here
 			return
 		}
 
@@ -42,7 +46,7 @@ func HandleParseScoreCard(service *ScoreService) gin.HandlerFunc {
 
 		// Rewind reader before full read
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to rewind file"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to rewind file"}) // TODO: better error here
 			return
 		}
 
@@ -52,24 +56,51 @@ func HandleParseScoreCard(service *ScoreService) gin.HandlerFunc {
 			return
 		}
 
-		// attempt to save the file, in theory we get back a url
-		url, err := service.Repository.SaveImage(c.Request.Context(), imgBytes, contentType)
+		// save the file to GCS, getting back the url
+		url, err := s.Repository.SaveImage(c.Request.Context(), imgBytes, contentType)
+		if err != nil {
+			// TODO: throw a better error
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		log.Printf("url: %s", url)
+
+		// start building out metadata struct that we will upload no matter what
+		md := ImageUploadMetadata{
+			ID:                    uuid.New().String(),
+			GoogleCloudStorageUrl: url,
+		}
+
+		// send the request to Gemini
+		text, err := GetTextFromLLM(c.Request.Context(), s, imgBytes)
+		if err != nil {
+			// TODO: log error
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		} else {
+			md.LlmParsedContent = &text
+		}
+
+		// save the image upload metadata
+		err = s.Repository.SaveImageUploadMetadata(c.Request.Context(), &md)
+		if err != nil {
+			// TODO: log error
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+
+		// parse the content from the string into known struct
+		document, err := GenerateGameScorecardDocumentFromText(c.Request.Context(), md.ID, game, text, s)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 
-		// TODO: GetRawTextFromLlm
+		// save the content to db
+		err = s.Repository.SaveGameScorecardDocument(c.Request.Context(), document)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 
-		// TODO: ParseTextToDataStructures
-
-		// TODO: SaveDataStructuresAsDocuments
-
-		// output, err := ParseScoreCard(c.Request.Context(), service, imgBytes)
-		// if err != nil {
-		// 	c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		// 	return
-		// }
-
-		c.JSON(http.StatusOK, url)
+		log.Printf("LLM Repsonse: %s", text)
+		log.Printf("Parsed Content: %+v", document)
+		c.JSON(http.StatusOK, document)
 	}
 }

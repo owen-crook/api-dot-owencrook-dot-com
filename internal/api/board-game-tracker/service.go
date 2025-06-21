@@ -13,7 +13,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/gemini"
 )
 
@@ -22,39 +25,23 @@ type ScoreService struct {
 	GeminiClient *gemini.Client
 }
 
-func ValidateScorecard(sc Scorecard) error {
-	fields, ok := GameScoreSchemas[sc.Game]
-	if !ok {
-		return fmt.Errorf("unsupported game type: %s", sc.Game)
-	}
+// func ValidateScorecard(sc Scorecard) error {
+// 	fields, ok := GameScoreSchemas[sc.Game]
+// 	if !ok {
+// 		return fmt.Errorf("unsupported game type: %s", sc.Game)
+// 	}
 
-	for player, scores := range sc.Players {
-		for _, f := range fields {
-			if _, ok := scores[f]; !ok {
-				return fmt.Errorf("player %s is missing required field %q", player, f)
-			}
-		}
-	}
-	return nil
-}
+// 	for player, scores := range sc.Players {
+// 		for _, f := range fields {
+// 			if _, ok := scores[f]; !ok {
+// 				return fmt.Errorf("player %s is missing required field %q", player, f)
+// 			}
+// 		}
+// 	}
+// 	return nil
+// }
 
-func ParseScoreCard(ctx context.Context, service *ScoreService, img []byte) (*Scorecard, error) {
-	if service == nil || service.GeminiClient == nil {
-		return nil, fmt.Errorf("HuggingFace client not available")
-	}
-
-	// game := "wyrmspan"
-	// categories := []string{
-	// 	"markers-on-dragon-guild",
-	// 	"tails-on-dragons",
-	// 	"end-game-abilities",
-	// 	"eggs",
-	// 	"cached-resources",
-	// 	"tucked-cards",
-	// 	"public-objectives",
-	// 	"remaining-coins-items",
-	// }
-
+func GetTextFromLLM(ctx context.Context, service *ScoreService, image []byte) (string, error) {
 	// TODO: this prompt is pretty good
 	// just generate it more dynamically based on which game we have (map full name to short name)
 	// and then render the example from an actual struct
@@ -108,36 +95,112 @@ func ParseScoreCard(ctx context.Context, service *ScoreService, img []byte) (*Sc
 		]
 	}
 	` + "```"
-	fmt.Printf("prompt:\n %s", p)
 
-	text, err := service.GeminiClient.GenerateFromTextAndImage(ctx, p, img)
+	text, err := service.GeminiClient.GenerateFromTextAndImage(ctx, p, image)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate text from image: %w", err)
+		return "", fmt.Errorf("failed to generate text from image: %w", err)
+	}
+	return text, nil
+}
+
+func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetadataId, game, text string, service *ScoreService) (*GameScorecardDocument, error) {
+	// initialize final vars
+	var id string
+	var date string
+	var location string
+	var playerScores []map[string]any
+
+	// initialize bools for checks
+	foundPlayerScores := false
+	allItemsInPlayerScoresValid := false
+
+	// set default values for required fields
+	id = uuid.New().String()
+	location = "unknown"
+	tzLocation, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		return nil, err
+	}
+	date = time.Now().In(tzLocation).Format("2006-01-02")
+
+	// the llm will likely reply with markdown formatting of ```json...```
+	// we need to attempt to clean the string as best as possible prior
+	// to marshalling into a struct
+	text = strings.Trim(text, "`")
+	text = strings.TrimSpace(text)
+
+	jsonStart := strings.Index(text, "{")
+	jsonEnd := strings.LastIndex(text, "}")
+
+	if jsonStart == -1 || jsonEnd == -1 || jsonEnd < jsonStart {
+		// TODO: return partially completed scorecard instead of error
+		return nil, fmt.Errorf("no valid JSON object found within LLM response")
 	}
 
-	fmt.Printf("\nreponse:\n %s", text)
-
-	// TODO: go from the text returned into meaningful datastructures :)
-	// lets go :)
-
-	// Parse the model's response as JSON into a Scorecard
-	var sc Scorecard
-	if err := json.Unmarshal([]byte(text), &sc); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal model output: %w", err)
+	likelyJsonString := text[jsonStart : jsonEnd+1]
+	var parsedJson map[string]interface{}
+	err = json.Unmarshal([]byte(likelyJsonString), &parsedJson)
+	if err != nil {
+		// TODO: return partially completed scorecard instead of error
+		return nil, fmt.Errorf("unable to parse potential JSON string until actual JSON")
 	}
 
-	// Validate the scorecard
-	if err := ValidateScorecard(sc); err != nil {
-		return nil, fmt.Errorf("scorecard validation failed: %w", err)
-	}
-
-	// Save to Firestore (assumes Store has SaveScorecard method)
-	if service.Repository != nil {
-		if err := service.Repository.SaveScorecard(ctx, &sc); err != nil {
-			return nil, fmt.Errorf("failed to save scorecard: %w", err)
+	// at this point, we have a usable struct, we just need to validate its contents
+	// we expect the keys date, location, and players
+	// date -> allowed to not have a value, but we expect the key
+	// location -> allowed to not have a value, but we expect the key
+	// players -> should always exist, if missing or invalid, we mark as incomplete
+	dateVal, ok := parsedJson["date"]
+	if ok {
+		if dateVal != nil {
+			dateStr, ok := dateVal.(string)
+			if ok {
+				date = dateStr
+			}
 		}
 	}
 
-	// Return the parsed scorecard
-	return &sc, nil
+	locationVal, ok := parsedJson["location"]
+	if ok {
+		if locationVal != nil {
+			locationStr, ok := locationVal.(string)
+			if ok {
+				location = locationStr
+			}
+		}
+	}
+
+	playersVal, ok := parsedJson["players"]
+	if ok {
+		playersSlice, ok := playersVal.([]any)
+		if ok {
+			foundPlayerScores = true
+			validItems := 0
+			for _, potentialPlayer := range playersSlice {
+				player, ok := potentialPlayer.(map[string]any)
+				if ok {
+					validItems++
+					playerScores = append(playerScores, player)
+					// TODO: there will be actual expect structs to convert these
+					//       to based on the game that we are playing. need to
+					//       do another layer of checks once we write the function
+					// TODO: instead of making this a list, key it by the name of the
+					//       the player
+				}
+			}
+			if validItems == len(playersSlice) {
+				allItemsInPlayerScoresValid = true
+			}
+		}
+	}
+
+	return &GameScorecardDocument{
+		ID:                    id,
+		ImageUploadMetadataID: imageUploadMetadataId,
+		Game:                  game,
+		Date:                  date,
+		IsCompleted:           foundPlayerScores && allItemsInPlayerScoresValid,
+		Location:              &location,
+		PlayerScores:          &playerScores,
+	}, nil
 }

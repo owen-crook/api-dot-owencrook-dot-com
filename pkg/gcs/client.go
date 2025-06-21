@@ -42,11 +42,6 @@ func (g *Client) UploadFile(ctx context.Context, objectPath string, data io.Read
 		return "", fmt.Errorf("failed to close GCS writer: %w", err)
 	}
 
-	// // Optional: make the object public
-	// if err := object.ACL().Set(ctx, storage.AllUsers, storage.RoleReader); err != nil {
-	// 	return "", fmt.Errorf("failed to set public ACL: %w", err)
-	// }
-
 	publicURL := fmt.Sprintf("https://storage.googleapis.com/%s/%s", g.bucketName, objectPath)
 	return publicURL, nil
 }

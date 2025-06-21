@@ -8,12 +8,13 @@ import (
 )
 
 type Config struct {
-	Port               string
-	GCPProjectID       string
-	GCPCredentialsFile string
-	GeminiToken        string
-	HuggingFaceToken   string
-	Environment        string
+	Port                string
+	GCPProjectID        string
+	GCPCredentialsFile  string
+	FirestoreDatabaseID string
+	GeminiToken         string
+	HuggingFaceToken    string
+	Environment         string
 }
 
 // LoadConfig reads environment variables into a Config struct.
@@ -25,12 +26,13 @@ func LoadConfig() *Config {
 	}
 
 	cfg := &Config{
-		Port:               getEnv("PORT", "8080"),
-		GCPProjectID:       getEnv("GCP_PROJECT_ID", ""),
-		GCPCredentialsFile: getEnv("GOOGLE_APPLICATION_CREDENTIALS", ""),
-		GeminiToken:        getEnv("GEMINI_API_KEY", ""),
-		HuggingFaceToken:   getEnv("HUGGING_FACE_INFERENCE_TOKEN", ""),
-		Environment:        getEnv("ENVIRONMENT", "development"),
+		Port:                getEnv("PORT", "8080"),
+		GCPProjectID:        getEnv("GCP_PROJECT_ID", ""),
+		GCPCredentialsFile:  getEnv("GOOGLE_APPLICATION_CREDENTIALS", ""),
+		FirestoreDatabaseID: getEnv("FIRESTORE_DATABASE_ID", ""),
+		GeminiToken:         getEnv("GEMINI_API_KEY", ""),
+		HuggingFaceToken:    getEnv("HUGGING_FACE_INFERENCE_TOKEN", ""),
+		Environment:         getEnv("ENVIRONMENT", "development"),
 	}
 
 	if cfg.GCPProjectID == "" {

@@ -30,7 +30,7 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	firestoreClient, err := firestore.NewFirestoreClient(ctx, cfg.GCPProjectID, cfg.GCPCredentialsFile)
+	firestoreClient, err := firestore.NewFirestoreClient(ctx, cfg.GCPProjectID, cfg.FirestoreDatabaseID, cfg.GCPCredentialsFile)
 	if err != nil {
 		log.Fatalf("failed to initialize Firestore: %v", err)
 	}
@@ -45,12 +45,6 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 	if bgtRepository == nil {
 		log.Fatal("bgtRepository is nil!")
 	}
-
-	// log.Println("Creating huggingface client")
-	// hfClient := huggingface.NewClient(cfg.HuggingFaceToken)
-	// if hfClient == nil {
-	// 	log.Fatal("huggingface client is nil!")
-	// }
 
 	geminiClient, err := gemini.NewClient(ctx, cfg.GeminiToken, "gemini-2.0-flash")
 	if err != nil {
