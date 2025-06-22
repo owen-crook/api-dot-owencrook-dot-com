@@ -16,6 +16,30 @@ const (
 	Wyrmspan Game = "wyrmspan"
 )
 
+type ScoringCategory struct {
+	ShortName string
+	LongName  string
+}
+
+var (
+	WingspanScoringCategories []ScoringCategory = []ScoringCategory{
+		{ShortName: "tails-on-dragons", LongName: "printed on dragons"},
+		{ShortName: "end-game-abilities", LongName: "from end-game abilities"},
+		{ShortName: "eggs", LongName: "per egg*"},
+		{ShortName: "cached-resources", LongName: "per cached resources"},
+		{ShortName: "public-objectives", LongName: "from public objectives (ties are friend-see rulebook p.15)"},
+		{ShortName: "remaining-coins-items", LongName: "rom remaining coins * items 1 per coin 1 per 4 food, dragon card, cave card (in any combination) (round down)"},
+	}
+
+	WyrmspanScoringCategories []ScoringCategory = []ScoringCategory{
+		{ShortName: "", LongName: ""},
+		{ShortName: "", LongName: ""},
+		{ShortName: "", LongName: ""},
+		{ShortName: "", LongName: ""},
+		{ShortName: "", LongName: ""},
+	}
+)
+
 // Storage Models
 type ImageUploadMetadata struct {
 	ID                    string  `firestore:"id" json:"id"`

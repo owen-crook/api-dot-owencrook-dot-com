@@ -34,6 +34,20 @@ func IsSupportedGame(game Game) bool {
 	return slices.Contains(GetSupportedGames(), game)
 }
 
+func GetShortNameScoringCategoriesByGame(game Game) ([]ScoringCategory, error) {
+	if !IsSupportedGame(game) {
+		return nil, fmt.Errorf("invalid game: %s", game)
+	}
+	switch game {
+	case Wyrmspan:
+		return WyrmspanScoringCategories, nil
+	case Wingspan:
+		return WingspanScoringCategories, nil
+	default:
+		return nil, fmt.Errorf("invalid game: %s", game)
+	}
+}
+
 func GetTextFromLLM(ctx context.Context, service *ScoreService, image []byte) (string, error) {
 	// TODO: this prompt is pretty good
 	// just generate it more dynamically based on which game we have (map full name to short name)
