@@ -58,6 +58,7 @@ func (s *Storage) SaveImageUploadMetadata(ctx context.Context, metadata *ImageUp
 
 func (s *Storage) SaveGameScorecardDocument(ctx context.Context, doc *GameScorecardDocument) error {
 	_, err := s.FirestoreClient.Collection("scorecards").Doc(doc.ID).Set(ctx, doc)
+	// TODO: standardize collection names
 	return err
 }
 

@@ -13,5 +13,5 @@ import (
 
 func RegisterRoutes(rg *gin.RouterGroup, service *ScoreService) {
 	bgt := rg.Group("/board-game-tracker")
-	bgt.POST("/parse-score-card", HandleParseScoreCard(service))
+	bgt.POST("/parse-score-card/:game", HandleParseScoreCard(service))
 }

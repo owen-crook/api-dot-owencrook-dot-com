@@ -10,6 +10,7 @@
 package boardgametracker
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -20,11 +21,14 @@ import (
 
 func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// parse and validate the game
+		game := c.Param("game")
+		if !IsSupportedGame(Game(game)) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Unsupported game: %s", game)})
+		}
+
+		// parse image
 		c.Request.ParseMultipartForm(10 << 20) // 10MB
-
-		// TODO: find a way to inject the game into the request
-		game := "wyrmspan"
-
 		file, _, err := c.Request.FormFile("image")
 		if err != nil {
 			log.Printf("FormFile error: %v", err)
@@ -33,11 +37,12 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		}
 		defer file.Close()
 
-		// Read first 512 bytes to detect content type
+		// read first 512 bytes to detect content type
 		header := make([]byte, 512)
 		n, err := file.Read(header)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read image header"}) // TODO: better error here
+			// TODO: better error here
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read image header"})
 			return
 		}
 
@@ -46,7 +51,8 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 
 		// Rewind reader before full read
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to rewind file"}) // TODO: better error here
+			// TODO: better error here
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to rewind file"})
 			return
 		}
 

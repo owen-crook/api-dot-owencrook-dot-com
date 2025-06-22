@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -25,21 +26,13 @@ type ScoreService struct {
 	GeminiClient *gemini.Client
 }
 
-// func ValidateScorecard(sc Scorecard) error {
-// 	fields, ok := GameScoreSchemas[sc.Game]
-// 	if !ok {
-// 		return fmt.Errorf("unsupported game type: %s", sc.Game)
-// 	}
+func GetSupportedGames() []Game {
+	return []Game{Wingspan, Wyrmspan}
+}
 
-// 	for player, scores := range sc.Players {
-// 		for _, f := range fields {
-// 			if _, ok := scores[f]; !ok {
-// 				return fmt.Errorf("player %s is missing required field %q", player, f)
-// 			}
-// 		}
-// 	}
-// 	return nil
-// }
+func IsSupportedGame(game Game) bool {
+	return slices.Contains(GetSupportedGames(), game)
+}
 
 func GetTextFromLLM(ctx context.Context, service *ScoreService, image []byte) (string, error) {
 	// TODO: this prompt is pretty good
