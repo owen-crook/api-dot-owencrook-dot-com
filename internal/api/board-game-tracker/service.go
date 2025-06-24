@@ -13,7 +13,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -31,10 +30,15 @@ func GetSupportedGames() []Game {
 }
 
 func IsSupportedGame(game Game) bool {
-	return slices.Contains(GetSupportedGames(), game)
+	for _, supportedGame := range GetSupportedGames() {
+		if supportedGame == game {
+			return true
+		}
+	}
+	return false
 }
 
-func GetShortNameScoringCategoriesByGame(game Game) ([]ScoringCategory, error) {
+func GetScoringCategoriesByGame(game Game) ([]ScoringCategory, error) {
 	if !IsSupportedGame(game) {
 		return nil, fmt.Errorf("invalid game: %s", game)
 	}
@@ -44,66 +48,140 @@ func GetShortNameScoringCategoriesByGame(game Game) ([]ScoringCategory, error) {
 	case Wingspan:
 		return WingspanScoringCategories, nil
 	default:
-		return nil, fmt.Errorf("invalid game: %s", game)
+		return nil, fmt.Errorf("unable to find scoring categories for game: %s", game)
 	}
 }
 
-func GetTextFromLLM(ctx context.Context, service *ScoreService, image []byte) (string, error) {
-	// TODO: this prompt is pretty good
-	// just generate it more dynamically based on which game we have (map full name to short name)
-	// and then render the example from an actual struct
-	p := `
-	This image contains a boardgame scorecard for the game Wyrmspan.
-	The rows of the scorecard represent score categories and the columns represent different players of that game.
-	The values at each row and column represent the score a given player acheived for that category.
-	The score categories are listed below (long-form :: short-form):
-	- printed on dragons :: tails-on-dragons
-	- from end-game abilities :: end-game-abilities
-	- per egg* :: eggs
-	- per cached resourced :: cached-resources
-	- from public objectives (ties are friend-see rulebook p.15) :: public-objectives
-	- from remaining coins * items 1 per coin 1 per 4 food, dragon card, cave card (in any combination) (round down) :: remaining-coins-items
-
-	Your job is to generate a plain JSON object containing information about the game as follows:
-	1. if a date is written anywhere on the scorecard (typically outside the primary scoring area), the value should be stored in the json key "date". if not visible, please leave the "date" key with a null value.
-	2. if a location is written anywhere on the scorecard (typically outside the primary scoring area), the value should be stored in the json key "location" if not visible, please leave the "location" key with a null value.
-	3. include a "players" key that contains an array of the scores from each player. make sure the players name is included, as well as the scores associated with the short form categories described above.
-
-	Here is an example of the expected response:
-	` + "```json" + `
-	{
-		"date": "2025-06-18",
-		"location": "minty",
-		"players": [
-			{
-				"name": "OC",
-				"markers-on-dragon-guild": 3,
-				"tails-on-dragons": 32,
-				"end-game-abilities": 13,
-				"eggs": 12,
-				"cached-resources": 1,
-				"tucked-cards": 5,
-				"public-objectives": 15,
-				"remaining-coins-items": 0,
-				"total": 81
-			},
-			{
-				"name": "RH"
-				"markers-on-dragon-guild": 6,
-				"tails-on-dragons": 45,
-				"end-game-abilities": 3,
-				"eggs": 7,
-				"cached-resources": 6,
-				"tucked-cards": 2,
-				"public-objectives": 12,
-				"remaining-coins-items": 0,
-				"total": 81
-			}
-		]
+func GetScorecardGeometryByGame(game Game) (string, error) {
+	if !IsSupportedGame(game) {
+		return "", fmt.Errorf("invalid game: %s", game)
 	}
-	` + "```"
+	switch game {
+	case Wyrmspan, Wingspan:
+		return "The rows of the scorecard represent score categories and the columns represent different players of that game. The values at each row and column represent the score a given player acheived for that category. ", nil
+	default:
+		return "", fmt.Errorf("unable to find scorecard geometry for game: %s", game)
+	}
+}
 
-	text, err := service.GeminiClient.GenerateFromTextAndImage(ctx, p, image)
+func GetExampleJsonByGame(game Game) (map[string]interface{}, error) {
+	if !IsSupportedGame(game) {
+		return nil, fmt.Errorf("invalid game: %s", game)
+	}
+	switch game {
+	case Wyrmspan:
+		return map[string]interface{}{
+			"date":     "2025-06-22",
+			"location": "minty",
+			"players": []map[string]interface{}{
+				{
+					"name":                    "SM",
+					"markers-on-dragon-guild": 3,
+					"tails-on-dragons":        32,
+					"end-game-abilities":      13,
+					"eggs":                    12,
+					"cached-resources":        1,
+					"tucked-cards":            5,
+					"public-objectives":       15,
+					"remaining-coins-items":   0,
+					"total":                   81,
+				},
+				{
+					"name":                    "WS",
+					"markers-on-dragon-guild": 7,
+					"tails-on-dragons":        24,
+					"end-game-abilities":      16,
+					"eggs":                    12,
+					"cached-resources":        7,
+					"tucked-cards":            6,
+					"public-objectives":       9,
+					"remaining-coins-items":   1,
+					"total":                   82,
+				},
+			},
+		}, nil
+	case Wingspan:
+		return map[string]interface{}{
+			"date":     "2025-06-23",
+			"location": "crook nook",
+			"players": []map[string]interface{}{
+				{
+					"name":               "OC",
+					"birds":              31,
+					"bonus-cards":        10,
+					"end-of-round-goals": 18,
+					"eggs":               18,
+					"food-on-cards":      5,
+					"tucked-cards":       2,
+					"total":              84,
+				},
+				{
+					"name":               "JB",
+					"birds":              49,
+					"bonus-cards":        4,
+					"end-of-round-goals": 17,
+					"eggs":               9,
+					"food-on-cards":      4,
+					"tucked-cards":       7,
+					"total":              90,
+				},
+				{
+					"name":               "MS",
+					"birds":              34,
+					"bonus-cards":        11,
+					"end-of-round-goals": 13,
+					"eggs":               6,
+					"food-on-cards":      2,
+					"tucked-cards":       1,
+					"total":              67,
+				},
+			},
+		}, nil
+	default:
+		return nil, fmt.Errorf("unable to find example json for game: %s", game)
+	}
+}
+
+func GetTextFromLLM(ctx context.Context, service *ScoreService, game Game, image []byte) (string, error) {
+	// grab standard prompt elements from critical functions to support
+	// dynamic generate of the prompt
+	categories, err := GetScoringCategoriesByGame(game)
+	if err != nil {
+		return "", err
+	}
+
+	scorecardGeometry, err := GetScorecardGeometryByGame(game)
+	if err != nil {
+		return "", err
+	}
+
+	exampleJson, err := GetExampleJsonByGame(game)
+	if err != nil {
+		return "", err
+	}
+	exampleJsonBytes, err := json.MarshalIndent(exampleJson, "", "  ")
+	if err != nil {
+		return "", err
+	}
+
+	var promptBuilder strings.Builder
+	fmt.Fprintf(&promptBuilder, "This image contains a boardgame scorecard for the game %s. ", string(game))
+	promptBuilder.WriteString(scorecardGeometry)
+	promptBuilder.WriteString("The score categories are listed below in the form 'long-form :: short-form':\n")
+	for _, category := range categories {
+		fmt.Fprintf(&promptBuilder, "- %s :: %s\n", category.LongName, category.ShortName)
+	}
+	promptBuilder.WriteString("\nYour job is to generate a plain JSON object containing information about the game as follows:\n")
+	promptBuilder.WriteString("1. if a date is written anywhere on the scorecard (typically outside the primary scoring area), the value should be stored in the json key 'date'. if not visible, please leave the 'date' key with a null value.\n")
+	promptBuilder.WriteString("2. if a location is written anywhere on the scorecard (typically outside the primary scoring area), the value should be stored in the json key 'location' if not visible, please leave the 'location' key with a null value.\n")
+	promptBuilder.WriteString("3. include a 'players' key that contains an array of the scores from each player. Each object in the array should contain the players name under the 'name' key, a key for each of the short-form categories above, and 'total' key for their overall score.\n")
+	promptBuilder.WriteString("\nHere is an example of the expected response:\n")
+	promptBuilder.WriteString("```json\n")
+	promptBuilder.WriteString(string(exampleJsonBytes))
+	promptBuilder.WriteString("\n```")
+	prompt := promptBuilder.String()
+
+	text, err := service.GeminiClient.GenerateFromTextAndImage(ctx, prompt, image)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate text from image: %w", err)
 	}
@@ -188,11 +266,12 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 				if ok {
 					validItems++
 					playerScores = append(playerScores, player)
-					// TODO: there will be actual expect structs to convert these
+					// TODO [blocking]: there will be actual expect structs to convert these
 					//       to based on the game that we are playing. need to
 					//       do another layer of checks once we write the function
-					// TODO: instead of making this a list, key it by the name of the
-					//       the player
+					// TODO [maybe]: instead of making this a list, key it by the name of the
+					//       				 the player. need to consider how we want to query/render
+					//							 the final data before any decisions are made
 				}
 			}
 			if validItems == len(playersSlice) {

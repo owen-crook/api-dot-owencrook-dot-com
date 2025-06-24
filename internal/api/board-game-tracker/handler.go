@@ -47,7 +47,6 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		}
 
 		contentType := http.DetectContentType(header[:n])
-		log.Printf("Detected content type: %s", contentType)
 
 		// Rewind reader before full read
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
@@ -65,11 +64,10 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		// save the file to GCS, getting back the url
 		url, err := s.Repository.SaveImage(c.Request.Context(), imgBytes, contentType)
 		if err != nil {
-			// TODO: throw a better error
+			// TODO: better error here
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		log.Printf("url: %s", url)
 
 		// start building out metadata struct that we will upload no matter what
 		md := ImageUploadMetadata{
@@ -78,7 +76,7 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		}
 
 		// send the request to Gemini
-		text, err := GetTextFromLLM(c.Request.Context(), s, imgBytes)
+		text, err := GetTextFromLLM(c.Request.Context(), s, Game(game), imgBytes)
 		if err != nil {
 			// TODO: log error
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -91,7 +89,11 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		if err != nil {
 			// TODO: log error
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
+
+		// TODO: if GetTextFromLLM fails, we may want to exit the flow after we save
+		//       the metadata to prevent GenerateGameScorecardDocumentFromText from failing
 
 		// parse the content from the string into known struct
 		document, err := GenerateGameScorecardDocumentFromText(c.Request.Context(), md.ID, game, text, s)
@@ -105,8 +107,6 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 
-		log.Printf("LLM Repsonse: %s", text)
-		log.Printf("Parsed Content: %+v", document)
 		c.JSON(http.StatusOK, document)
 	}
 }

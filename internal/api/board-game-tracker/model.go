@@ -22,21 +22,23 @@ type ScoringCategory struct {
 }
 
 var (
-	WingspanScoringCategories []ScoringCategory = []ScoringCategory{
+	WyrmspanScoringCategories []ScoringCategory = []ScoringCategory{
+		{ShortName: "guild", LongName: "markers on the dragon guild"},
 		{ShortName: "tails-on-dragons", LongName: "printed on dragons"},
 		{ShortName: "end-game-abilities", LongName: "from end-game abilities"},
 		{ShortName: "eggs", LongName: "per egg*"},
-		{ShortName: "cached-resources", LongName: "per cached resources"},
-		{ShortName: "public-objectives", LongName: "from public objectives (ties are friend-see rulebook p.15)"},
-		{ShortName: "remaining-coins-items", LongName: "rom remaining coins * items 1 per coin 1 per 4 food, dragon card, cave card (in any combination) (round down)"},
+		{ShortName: "cached-resources", LongName: "per cached resource*"},
+		{ShortName: "public-objectives", LongName: "from public objectives (ties are friendly--see rulebook p.15)"},
+		{ShortName: "remaining-coins-items", LongName: "from remaining coins & items 1 per coin 1 per 4 food, dragon card, cave card (in any combination) (round down)"},
 	}
 
-	WyrmspanScoringCategories []ScoringCategory = []ScoringCategory{
-		{ShortName: "", LongName: ""},
-		{ShortName: "", LongName: ""},
-		{ShortName: "", LongName: ""},
-		{ShortName: "", LongName: ""},
-		{ShortName: "", LongName: ""},
+	WingspanScoringCategories []ScoringCategory = []ScoringCategory{
+		{ShortName: "birds", LongName: "birds"},
+		{ShortName: "bonus-cards", LongName: "bonus cards"},
+		{ShortName: "end-of-round-goals", LongName: "end-of-round goals"},
+		{ShortName: "eggs", LongName: "eggs"},
+		{ShortName: "food-on-cards", LongName: "food on cards"},
+		{ShortName: "tucked-cards", LongName: "tucked cards"},
 	}
 )
 

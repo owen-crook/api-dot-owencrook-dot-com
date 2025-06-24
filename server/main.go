@@ -13,3 +13,6 @@ func main() {
 
 	r.Run(":" + cfg.Port)
 }
+
+// TODO [blocking]: dockerize repo with production build
+// TODO [blocking]: figure out authorization from other services
