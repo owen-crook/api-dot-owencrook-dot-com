@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# Binaries
+*.exe
+*.exe~
+
+# Dependencies
+vendor/
+node_modules/
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Dockerfile and Compose (optional, if you don’t want them copied)
+Dockerfile
+docker-compose.yml
+
+# config files
+*.json
+
+# other
+*.jpg
