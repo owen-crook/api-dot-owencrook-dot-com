@@ -8,12 +8,9 @@ import (
 )
 
 type Config struct {
-	Port                string
 	GCPProjectID        string
-	GCPCredentialsFile  string
 	FirestoreDatabaseID string
 	GeminiToken         string
-	HuggingFaceToken    string
 	Environment         string
 }
 
@@ -26,25 +23,26 @@ func LoadConfig() *Config {
 	}
 
 	cfg := &Config{
-		Port:                getEnv("PORT", "8080"),
 		GCPProjectID:        getEnv("GCP_PROJECT_ID", ""),
-		GCPCredentialsFile:  getEnv("GOOGLE_APPLICATION_CREDENTIALS", ""),
 		FirestoreDatabaseID: getEnv("FIRESTORE_DATABASE_ID", ""),
 		GeminiToken:         getEnv("GEMINI_API_KEY", ""),
-		HuggingFaceToken:    getEnv("HUGGING_FACE_INFERENCE_TOKEN", ""),
-		Environment:         getEnv("ENVIRONMENT", "development"),
+		Environment:         getEnv("ENVIRONMENT", "LOCAL"),
 	}
 
 	if cfg.GCPProjectID == "" {
 		log.Fatal("GCP_PROJECT_ID is required")
 	}
 
-	if cfg.GCPCredentialsFile == "" {
-		log.Fatal("GOOGLE_APPLICATION_CREDENTIALS is required")
+	if cfg.FirestoreDatabaseID == "" {
+		log.Fatal("FirestoreDatabaseID is required")
 	}
 
 	if cfg.GeminiToken == "" {
 		log.Fatal("GEMINI_API_KEY is required")
+	}
+
+	if cfg.Environment == "LOCAL" && getEnv("GOOGLE_APPLICATION_CREDENTIALS", "") == "" {
+		log.Fatal("GOOGLE_APPLICATION_CREDENTIALS required for local development")
 	}
 
 	return cfg

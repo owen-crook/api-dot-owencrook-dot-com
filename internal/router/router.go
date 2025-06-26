@@ -30,7 +30,7 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	firestoreClient, err := firestore.NewFirestoreClient(ctx, cfg.GCPProjectID, cfg.FirestoreDatabaseID, cfg.GCPCredentialsFile)
+	firestoreClient, err := firestore.NewFirestoreClient(ctx, cfg.GCPProjectID, cfg.FirestoreDatabaseID)
 	if err != nil {
 		log.Fatalf("failed to initialize Firestore: %v", err)
 	}

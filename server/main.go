@@ -11,7 +11,7 @@ func main() {
 	// Setup router
 	r := router.SetupRouter(cfg)
 
-	r.Run(":" + cfg.Port)
+	r.Run()
 }
 
 // TODO [blocking]: figure out authorization from other services
