@@ -5,6 +5,7 @@ go 1.24.1
 require (
 	cloud.google.com/go/firestore v1.18.0
 	cloud.google.com/go/storage v1.55.0
+	github.com/coreos/go-oidc/v3 v3.14.1
 	github.com/gin-gonic/gin v1.10.1
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1

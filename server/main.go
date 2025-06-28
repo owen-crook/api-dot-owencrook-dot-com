@@ -13,5 +13,3 @@ func main() {
 
 	r.Run()
 }
-
-// TODO [blocking]: figure out authorization from other services
