@@ -1,34 +1,36 @@
 package router
 
 import (
-	// "github.com/owen-crook/api-dot-owencrook-dot-com/internal/api/billing"
-	// "github.com/owen-crook/api-dot-owencrook-dot-com/internal/api/user"
-
 	"context"
 	"log"
 
 	boardgametracker "github.com/owen-crook/api-dot-owencrook-dot-com/internal/api/board-game-tracker"
+	"github.com/owen-crook/api-dot-owencrook-dot-com/internal/auth"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/internal/config"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/firestore"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/gcs"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/gemini"
-
-	// "github.com/owen-crook/api-dot-owencrook-dot-com/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 )
 
 func SetupRouter(cfg *config.Config) *gin.Engine {
 	ctx := context.Background()
+
+	// initialize auth
+	if err := auth.Init(ctx, cfg.GoogleClientID); err != nil {
+		log.Fatalf("auth init failed: %v", err)
+	}
+
 	r := gin.Default()
 
-	// Global middleware
-	// r.Use(middleware.Logger())
-
-	// Health check
+	// health check
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
+
+	// setup route groups
+	v1RouteGroup := r.Group("/api/v1")
 
 	firestoreClient, err := firestore.NewFirestoreClient(ctx, cfg.GCPProjectID, cfg.FirestoreDatabaseID)
 	if err != nil {
@@ -51,13 +53,11 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 		log.Fatal("gemini client is nil!")
 	}
 
-	api := r.Group("/api/v1")
-
 	bgtService := &boardgametracker.ScoreService{
 		Repository:   bgtRepository,
 		GeminiClient: geminiClient,
 	}
 	log.Println("Registering boardgametracker routes")
-	boardgametracker.RegisterRoutes(api, bgtService)
+	boardgametracker.RegisterRoutes(cfg, v1RouteGroup, bgtService)
 	return r
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -12,6 +13,9 @@ type Config struct {
 	FirestoreDatabaseID string
 	GeminiToken         string
 	Environment         string
+	GoogleClientID      string
+	GoogleClientSecret  string
+	AdminEmails         string
 }
 
 // LoadConfig reads environment variables into a Config struct.
@@ -23,10 +27,17 @@ func LoadConfig() *Config {
 	}
 
 	cfg := &Config{
+		AdminEmails:         getEnv("ADMIN_EMAILS", ""),
 		GCPProjectID:        getEnv("GCP_PROJECT_ID", ""),
 		FirestoreDatabaseID: getEnv("FIRESTORE_DATABASE_ID", ""),
 		GeminiToken:         getEnv("GEMINI_API_KEY", ""),
 		Environment:         getEnv("ENVIRONMENT", "LOCAL"),
+		GoogleClientID:      getEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret:  getEnv("GOOGLE_CLIENT_SECRET", ""),
+	}
+
+	if cfg.AdminEmails == "" {
+		log.Fatal("ADMIN_EMAILS is required")
 	}
 
 	if cfg.GCPProjectID == "" {
@@ -41,6 +52,14 @@ func LoadConfig() *Config {
 		log.Fatal("GEMINI_API_KEY is required")
 	}
 
+	if cfg.GoogleClientSecret == "" {
+		log.Fatal("GOOGLE_CLIENT_ID is required")
+	}
+
+	if cfg.FirestoreDatabaseID == "" {
+		log.Fatal("GOOGLE_CLIENT_SECRET is required")
+	}
+
 	if cfg.Environment == "LOCAL" && getEnv("GOOGLE_APPLICATION_CREDENTIALS", "") == "" {
 		log.Fatal("GOOGLE_APPLICATION_CREDENTIALS required for local development")
 	}
@@ -53,4 +72,12 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func GetAdminEmails(cfg Config) []string {
+	emails := cfg.AdminEmails
+	if emails == "" {
+		return nil
+	}
+	return strings.Split(emails, ",")
 }

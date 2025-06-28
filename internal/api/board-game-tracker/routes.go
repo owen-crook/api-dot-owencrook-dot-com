@@ -8,10 +8,25 @@
 package boardgametracker
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
+	"github.com/owen-crook/api-dot-owencrook-dot-com/internal/auth"
+	"github.com/owen-crook/api-dot-owencrook-dot-com/internal/config"
 )
 
-func RegisterRoutes(rg *gin.RouterGroup, service *ScoreService) {
-	bgt := rg.Group("/board-game-tracker")
-	bgt.POST("/parse-score-card/:game", HandleParseScoreCard(service))
+func RegisterRoutes(cfg *config.Config, rg *gin.RouterGroup, service *ScoreService) {
+	// setup different route groups for various auth levels
+	boardGameTrackerGroup := rg.Group("/board-game-tracker")                                                           // public
+	boardGameTrackerAuthNGroup := boardGameTrackerGroup.Group("/", auth.RequireAuth(nil))                              // authN
+	boardGameTrackerAuthZAdminGroup := boardGameTrackerGroup.Group("/", auth.RequireAuth(config.GetAdminEmails(*cfg))) // authZ
+
+	// mount authN groups
+	// TODO: delete dummy route once actual routes are in place
+	boardGameTrackerAuthNGroup.GET("/dummy", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "found a dummy", "dummy": "you"})
+	})
+
+	// mount admin routes
+	boardGameTrackerAuthZAdminGroup.POST("/parse-score-card/:game", HandleParseScoreCard(service))
 }
