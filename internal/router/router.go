@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"log"
+	"time"
 
 	boardgametracker "github.com/owen-crook/api-dot-owencrook-dot-com/internal/api/board-game-tracker"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/internal/auth"
@@ -11,6 +12,7 @@ import (
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/gcs"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/gemini"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -23,6 +25,18 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 	}
 
 	r := gin.Default()
+
+	// manage cors
+	// Configure CORS middleware
+	corsConfig := cors.DefaultConfig()
+	corsConfig.AllowOrigins = []string{"http://localhost:3000", "https://owencrook.com"}
+	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+	corsConfig.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"}
+	corsConfig.ExposeHeaders = []string{"Content-Length"}
+	corsConfig.AllowCredentials = true
+	corsConfig.MaxAge = 12 * time.Hour // How long the preflight request can be cached
+
+	r.Use(cors.New(corsConfig))
 
 	// health check
 	r.GET("/healthz", func(c *gin.Context) {
