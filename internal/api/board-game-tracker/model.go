@@ -8,6 +8,8 @@
 
 package boardgametracker
 
+import "time"
+
 // Business Logic Models & Constants
 type Game string
 
@@ -44,9 +46,11 @@ var (
 
 // Storage Models
 type ImageUploadMetadata struct {
-	ID                    string  `firestore:"id" json:"id"`
-	GoogleCloudStorageUrl string  `firestore:"google_cloud_storage_url" json:"google_cloud_storage_url"`
-	LlmParsedContent      *string `firestore:"parsed_content" json:"parsed_content,omitempty"`
+	ID                    string    `firestore:"id" json:"id"`
+	GoogleCloudStorageUrl string    `firestore:"google_cloud_storage_url" json:"google_cloud_storage_url"`
+	LlmParsedContent      *string   `firestore:"parsed_content" json:"parsed_content,omitempty"`
+	CreatedBy             *string   `firestore:"created_by" json:"created_by,omitempty"`
+	CreatedAt             time.Time `firestore:"created_at" json:"created_at"`
 }
 
 type GameScorecardDocument struct {
@@ -57,4 +61,6 @@ type GameScorecardDocument struct {
 	IsCompleted           bool              `firestore:"is_completed" json:"is_completed"`
 	Location              *string           `firestore:"location" json:"location,omitempty"`
 	PlayerScores          *[]map[string]any `firestore:"player_scores" json:"player_scores,omitempty"`
+	CreatedBy             *string           `firestore:"created_by" json:"created_by,omitempty"`
+	CreatedAt             time.Time         `firestore:"created_at" json:"created_at"`
 }
