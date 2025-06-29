@@ -188,10 +188,10 @@ func GetTextFromLLM(ctx context.Context, service *ScoreService, game Game, image
 	return text, nil
 }
 
-func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetadataId, game, text string, service *ScoreService) (*GameScorecardDocument, error) {
+func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetadataId, creator, game, text string, service *ScoreService) (*GameScorecardDocument, error) {
 	// initialize final vars
 	var id string
-	var date string
+	var date string // TODO (OC-16): reconcile the parsed date with the passed in date
 	var location string
 	var playerScores []map[string]any
 
@@ -235,6 +235,7 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 	// date -> allowed to not have a value, but we expect the key
 	// location -> allowed to not have a value, but we expect the key
 	// players -> should always exist, if missing or invalid, we mark as incomplete
+	// TODO (OC-16): convert the parsed date into an actual time.Time() and format HH:MM:SS to midnight for that day
 	dateVal, ok := parsedJson["date"]
 	if ok {
 		if dateVal != nil {
@@ -284,9 +285,11 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 		ID:                    id,
 		ImageUploadMetadataID: imageUploadMetadataId,
 		Game:                  game,
-		Date:                  date,
+		Date:                  date, // TODO (OC-16): convert to date
 		IsCompleted:           foundPlayerScores && allItemsInPlayerScoresValid,
 		Location:              &location,
 		PlayerScores:          &playerScores,
+		CreatedBy:             &creator,
+		CreatedAt:             time.Now(),
 	}, nil
 }
