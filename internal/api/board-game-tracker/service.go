@@ -270,6 +270,7 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 				player, ok := potentialPlayer.(map[string]any)
 				if ok {
 					validItems++
+					player["id"] = uuid.New().String()
 					playerScores = append(playerScores, player)
 					// TODO [blocking]: there will be actual expect structs to convert these
 					//       to based on the game that we are playing. need to
