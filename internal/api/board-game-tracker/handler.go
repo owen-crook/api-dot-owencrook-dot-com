@@ -41,7 +41,7 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		header := make([]byte, 512)
 		n, err := file.Read(header)
 		if err != nil {
-			// TODO: better error here
+			log.Printf("Header error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read image header"})
 			return
 		}
@@ -50,13 +50,14 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 
 		// Rewind reader before full read
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
-			// TODO: better error here
+			log.Printf("File rewinder error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to rewind file"})
 			return
 		}
 
 		imgBytes, err := io.ReadAll(file)
 		if err != nil {
+			log.Printf("Image read error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read image"})
 			return
 		}
@@ -64,7 +65,7 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		// save the file to GCS, getting back the url
 		url, err := s.Repository.SaveImage(c.Request.Context(), imgBytes, contentType)
 		if err != nil {
-			// TODO: better error here
+			log.Printf("Image save error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -78,7 +79,7 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		// send the request to Gemini
 		text, err := GetTextFromLLM(c.Request.Context(), s, Game(game), imgBytes)
 		if err != nil {
-			// TODO: log error
+			log.Printf("LLM Text Parsing Error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		} else {
 			md.LlmParsedContent = &text
@@ -87,7 +88,7 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		// save the image upload metadata
 		err = s.Repository.SaveImageUploadMetadata(c.Request.Context(), &md)
 		if err != nil {
-			// TODO: log error
+			log.Printf("Image upload metadata error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
