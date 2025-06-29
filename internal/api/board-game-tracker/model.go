@@ -57,7 +57,7 @@ type GameScorecardDocument struct {
 	ID                    string            `firestore:"id" json:"id"`
 	ImageUploadMetadataID string            `firestore:"image_upload_metadata_id" json:"image_upload_metadata_id"`
 	Game                  string            `firestore:"game" json:"game"`
-	Date                  string            `firestore:"date" json:"date"`
+	Date                  time.Time         `firestore:"date" json:"date"`
 	IsCompleted           bool              `firestore:"is_completed" json:"is_completed"`
 	Location              *string           `firestore:"location" json:"location,omitempty"`
 	PlayerScores          *[]map[string]any `firestore:"player_scores" json:"player_scores,omitempty"`

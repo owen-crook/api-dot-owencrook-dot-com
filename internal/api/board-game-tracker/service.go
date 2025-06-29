@@ -13,11 +13,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/gemini"
+	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/helpers"
 )
 
 type ScoreService struct {
@@ -188,10 +190,11 @@ func GetTextFromLLM(ctx context.Context, service *ScoreService, game Game, image
 	return text, nil
 }
 
-func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetadataId, creator, game, text string, service *ScoreService) (*GameScorecardDocument, error) {
+func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetadataId, creator, game, text string, submittedDate time.Time, service *ScoreService) (*GameScorecardDocument, error) {
 	// initialize final vars
 	var id string
-	var date string // TODO (OC-16): reconcile the parsed date with the passed in date
+	var finalDate time.Time
+	var parsedDate time.Time
 	var location string
 	var playerScores []map[string]any
 
@@ -202,11 +205,7 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 	// set default values for required fields
 	id = uuid.New().String()
 	location = "unknown"
-	tzLocation, err := time.LoadLocation("America/Los_Angeles")
-	if err != nil {
-		return nil, err
-	}
-	date = time.Now().In(tzLocation).Format("2006-01-02")
+	finalDate = submittedDate
 
 	// the llm will likely reply with markdown formatting of ```json...```
 	// we need to attempt to clean the string as best as possible prior
@@ -224,7 +223,7 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 
 	likelyJsonString := text[jsonStart : jsonEnd+1]
 	var parsedJson map[string]interface{}
-	err = json.Unmarshal([]byte(likelyJsonString), &parsedJson)
+	err := json.Unmarshal([]byte(likelyJsonString), &parsedJson)
 	if err != nil {
 		// TODO: return partially completed scorecard instead of error
 		return nil, fmt.Errorf("unable to parse potential JSON string until actual JSON")
@@ -232,16 +231,21 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 
 	// at this point, we have a usable struct, we just need to validate its contents
 	// we expect the keys date, location, and players
-	// date -> allowed to not have a value, but we expect the key
-	// location -> allowed to not have a value, but we expect the key
+	// date -> key should always exist, but value can be null
+	// location -> key should always exist, but value can be null
 	// players -> should always exist, if missing or invalid, we mark as incomplete
-	// TODO (OC-16): convert the parsed date into an actual time.Time() and format HH:MM:SS to midnight for that day
-	dateVal, ok := parsedJson["date"]
+	parsedDateVal, ok := parsedJson["date"]
 	if ok {
-		if dateVal != nil {
-			dateStr, ok := dateVal.(string)
+		if parsedDateVal != nil {
+			parsedDateStr, ok := parsedDateVal.(string)
 			if ok {
-				date = dateStr
+				log.Printf("found datestring %s", parsedDateStr)
+				parsedDate, err = helpers.ParseFlexibleDate(parsedDateStr)
+				if err != nil {
+					log.Printf("unable to parse string to date for %s", parsedDateStr)
+				} else {
+					finalDate = helpers.TimeAsCalendarDateOnly(parsedDate)
+				}
 			}
 		}
 	}
@@ -285,11 +289,11 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 		ID:                    id,
 		ImageUploadMetadataID: imageUploadMetadataId,
 		Game:                  game,
-		Date:                  date, // TODO (OC-16): convert to date
+		Date:                  finalDate,
 		IsCompleted:           foundPlayerScores && allItemsInPlayerScoresValid,
 		Location:              &location,
 		PlayerScores:          &playerScores,
 		CreatedBy:             &creator,
-		CreatedAt:             time.Now(),
+		CreatedAt:             time.Now().In(time.UTC),
 	}, nil
 }
