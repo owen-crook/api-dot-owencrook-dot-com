@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"strings"
 	"time"
 
@@ -260,6 +261,19 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 		}
 	}
 
+	// determine expected columns on the players scores
+	categories, err := GetScoringCategoriesByGame(Game(game))
+	if err != nil {
+		return nil, err
+	}
+	var expectedKeys []string
+	for _, category := range categories {
+		expectedKeys = append(expectedKeys, category.ShortName)
+	}
+	expectedKeys = append(expectedKeys, "total")
+	expectedKeys = append(expectedKeys, "name")
+
+	// parse the player objects
 	playersVal, ok := parsedJson["players"]
 	if ok {
 		playersSlice, ok := playersVal.([]any)
@@ -269,15 +283,71 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 			for _, potentialPlayer := range playersSlice {
 				player, ok := potentialPlayer.(map[string]any)
 				if ok {
-					validItems++
-					player["id"] = uuid.New().String()
-					playerScores = append(playerScores, player)
-					// TODO [blocking]: there will be actual expect structs to convert these
-					//       to based on the game that we are playing. need to
-					//       do another layer of checks once we write the function
-					// TODO [maybe]: instead of making this a list, key it by the name of the
-					//       				 the player. need to consider how we want to query/render
-					//							 the final data before any decisions are made
+					// initialize a new map that will only contain expected keys
+					// and our tracking slices
+					playerClean := make(map[string]any)
+					playerIsValid := true
+					var missing []string
+					var extra []string
+
+					// convert expected to map for fast lookup
+					expectedSet := make(map[string]bool)
+					for _, key := range expectedKeys {
+						expectedSet[key] = true
+					}
+
+					// find extra keys and build clean object
+					for key, value := range player {
+						if expectedSet[key] {
+							if key == "name" { // name should be a string
+								valueStr, ok := value.(string)
+								if !ok {
+									log.Printf("name is not string, using unknown")
+									playerClean[key] = "unknown"
+								} else {
+									playerClean[key] = strings.ToLower(valueStr)
+								}
+							} else { // everything else should be an integer
+								floatVal, ok := value.(float64)
+								if !ok {
+									log.Printf("score for key %s is not int, using 0", key)
+									playerClean[key] = 0
+								} else {
+									if float64(int(floatVal)) == floatVal {
+										playerClean[key] = int(floatVal)
+									} else {
+										log.Printf("score for key %s is float, not int, rounding", key)
+										playerClean[key] = int(math.Round(floatVal))
+									}
+								}
+							}
+						} else {
+							extra = append(extra, key)
+						}
+					}
+
+					// find missing keys
+					for _, key := range expectedKeys {
+						if _, exists := player[key]; !exists {
+							missing = append(missing, key)
+						}
+					}
+
+					if len(extra) > 0 {
+						playerIsValid = false
+						log.Printf("found the following extra keys: %v", extra)
+					}
+					if len(missing) > 0 {
+						playerIsValid = false
+						log.Printf("found the following missing keys: %v", missing)
+					}
+
+					if playerIsValid {
+						validItems++
+					}
+
+					playerClean["id"] = uuid.New().String()
+					playerScores = append(playerScores, playerClean)
 				}
 			}
 			if validItems == len(playersSlice) {
