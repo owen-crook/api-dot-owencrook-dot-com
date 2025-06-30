@@ -13,11 +13,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"math"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/gemini"
+	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/helpers"
 )
 
 type ScoreService struct {
@@ -188,10 +191,11 @@ func GetTextFromLLM(ctx context.Context, service *ScoreService, game Game, image
 	return text, nil
 }
 
-func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetadataId, game, text string, service *ScoreService) (*GameScorecardDocument, error) {
+func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetadataId, creator, game, text string, submittedDate time.Time, service *ScoreService) (*GameScorecardDocument, error) {
 	// initialize final vars
 	var id string
-	var date string
+	var finalDate time.Time
+	var parsedDate time.Time
 	var location string
 	var playerScores []map[string]any
 
@@ -202,11 +206,7 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 	// set default values for required fields
 	id = uuid.New().String()
 	location = "unknown"
-	tzLocation, err := time.LoadLocation("America/Los_Angeles")
-	if err != nil {
-		return nil, err
-	}
-	date = time.Now().In(tzLocation).Format("2006-01-02")
+	finalDate = submittedDate
 
 	// the llm will likely reply with markdown formatting of ```json...```
 	// we need to attempt to clean the string as best as possible prior
@@ -224,7 +224,7 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 
 	likelyJsonString := text[jsonStart : jsonEnd+1]
 	var parsedJson map[string]interface{}
-	err = json.Unmarshal([]byte(likelyJsonString), &parsedJson)
+	err := json.Unmarshal([]byte(likelyJsonString), &parsedJson)
 	if err != nil {
 		// TODO: return partially completed scorecard instead of error
 		return nil, fmt.Errorf("unable to parse potential JSON string until actual JSON")
@@ -232,15 +232,21 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 
 	// at this point, we have a usable struct, we just need to validate its contents
 	// we expect the keys date, location, and players
-	// date -> allowed to not have a value, but we expect the key
-	// location -> allowed to not have a value, but we expect the key
+	// date -> key should always exist, but value can be null
+	// location -> key should always exist, but value can be null
 	// players -> should always exist, if missing or invalid, we mark as incomplete
-	dateVal, ok := parsedJson["date"]
+	parsedDateVal, ok := parsedJson["date"]
 	if ok {
-		if dateVal != nil {
-			dateStr, ok := dateVal.(string)
+		if parsedDateVal != nil {
+			parsedDateStr, ok := parsedDateVal.(string)
 			if ok {
-				date = dateStr
+				log.Printf("found datestring %s", parsedDateStr)
+				parsedDate, err = helpers.ParseFlexibleDate(parsedDateStr)
+				if err != nil {
+					log.Printf("unable to parse string to date for %s", parsedDateStr)
+				} else {
+					finalDate = helpers.TimeAsCalendarDateOnly(parsedDate)
+				}
 			}
 		}
 	}
@@ -255,6 +261,19 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 		}
 	}
 
+	// determine expected columns on the players scores
+	categories, err := GetScoringCategoriesByGame(Game(game))
+	if err != nil {
+		return nil, err
+	}
+	var expectedKeys []string
+	for _, category := range categories {
+		expectedKeys = append(expectedKeys, category.ShortName)
+	}
+	expectedKeys = append(expectedKeys, "total")
+	expectedKeys = append(expectedKeys, "name")
+
+	// parse the player objects
 	playersVal, ok := parsedJson["players"]
 	if ok {
 		playersSlice, ok := playersVal.([]any)
@@ -264,14 +283,71 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 			for _, potentialPlayer := range playersSlice {
 				player, ok := potentialPlayer.(map[string]any)
 				if ok {
-					validItems++
-					playerScores = append(playerScores, player)
-					// TODO [blocking]: there will be actual expect structs to convert these
-					//       to based on the game that we are playing. need to
-					//       do another layer of checks once we write the function
-					// TODO [maybe]: instead of making this a list, key it by the name of the
-					//       				 the player. need to consider how we want to query/render
-					//							 the final data before any decisions are made
+					// initialize a new map that will only contain expected keys
+					// and our tracking slices
+					playerClean := make(map[string]any)
+					playerIsValid := true
+					var missing []string
+					var extra []string
+
+					// convert expected to map for fast lookup
+					expectedSet := make(map[string]bool)
+					for _, key := range expectedKeys {
+						expectedSet[key] = true
+					}
+
+					// find extra keys and build clean object
+					for key, value := range player {
+						if expectedSet[key] {
+							if key == "name" { // name should be a string
+								valueStr, ok := value.(string)
+								if !ok {
+									log.Printf("name is not string, using unknown")
+									playerClean[key] = "unknown"
+								} else {
+									playerClean[key] = strings.ToLower(valueStr)
+								}
+							} else { // everything else should be an integer
+								floatVal, ok := value.(float64)
+								if !ok {
+									log.Printf("score for key %s is not int, using 0", key)
+									playerClean[key] = 0
+								} else {
+									if float64(int(floatVal)) == floatVal {
+										playerClean[key] = int(floatVal)
+									} else {
+										log.Printf("score for key %s is float, not int, rounding", key)
+										playerClean[key] = int(math.Round(floatVal))
+									}
+								}
+							}
+						} else {
+							extra = append(extra, key)
+						}
+					}
+
+					// find missing keys
+					for _, key := range expectedKeys {
+						if _, exists := player[key]; !exists {
+							missing = append(missing, key)
+						}
+					}
+
+					if len(extra) > 0 {
+						playerIsValid = false
+						log.Printf("found the following extra keys: %v", extra)
+					}
+					if len(missing) > 0 {
+						playerIsValid = false
+						log.Printf("found the following missing keys: %v", missing)
+					}
+
+					if playerIsValid {
+						validItems++
+					}
+
+					playerClean["id"] = uuid.New().String()
+					playerScores = append(playerScores, playerClean)
 				}
 			}
 			if validItems == len(playersSlice) {
@@ -284,9 +360,11 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 		ID:                    id,
 		ImageUploadMetadataID: imageUploadMetadataId,
 		Game:                  game,
-		Date:                  date,
+		Date:                  finalDate,
 		IsCompleted:           foundPlayerScores && allItemsInPlayerScoresValid,
 		Location:              &location,
 		PlayerScores:          &playerScores,
+		CreatedBy:             &creator,
+		CreatedAt:             time.Now().In(time.UTC),
 	}, nil
 }

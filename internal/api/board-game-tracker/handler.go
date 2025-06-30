@@ -14,13 +14,22 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/owen-crook/api-dot-owencrook-dot-com/internal/auth"
+	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/helpers"
 )
 
 func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// parse user making request (they should be authZ'd to get here, just want data for logging)
+		user, err := auth.GetUserFromRequest(c.Request)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unable to parse user from request"})
+		}
+
 		// parse and validate the game
 		game := c.Param("game")
 		if !IsSupportedGame(Game(game)) {
@@ -36,6 +45,18 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 			return
 		}
 		defer file.Close()
+
+		// parse the date, falling back to today
+		date := helpers.TimeAsCalendarDateOnly(time.Now())
+		dateStrFromRequest := c.PostForm("date")
+		if dateStrFromRequest != "" {
+			parsedDate, err := helpers.ParseFlexibleDate(dateStrFromRequest)
+			if err != nil {
+				log.Printf("Unable to parse date from request: %v", err)
+			} else {
+				date = helpers.TimeAsCalendarDateOnly(parsedDate)
+			}
+		}
 
 		// read first 512 bytes to detect content type
 		header := make([]byte, 512)
@@ -74,6 +95,8 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		md := ImageUploadMetadata{
 			ID:                    uuid.New().String(),
 			GoogleCloudStorageUrl: url,
+			CreatedBy:             &user.Email,
+			CreatedAt:             time.Now().In(time.UTC),
 		}
 
 		// send the request to Gemini
@@ -97,7 +120,7 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		//       the metadata to prevent GenerateGameScorecardDocumentFromText from failing
 
 		// parse the content from the string into known struct
-		document, err := GenerateGameScorecardDocumentFromText(c.Request.Context(), md.ID, game, text, s)
+		document, err := GenerateGameScorecardDocumentFromText(c.Request.Context(), md.ID, user.Email, game, text, date, s)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
