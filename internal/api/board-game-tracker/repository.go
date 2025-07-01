@@ -19,6 +19,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/gcs"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/helpers"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type Storage struct {
@@ -61,6 +63,14 @@ func (s *Storage) SaveGameScorecardDocument(ctx context.Context, doc *GameScorec
 	return err
 }
 
-func GetTextFromPix2Struct(imageData []byte) (string, error) {
-	return "", nil
+func (s *Storage) CheckDocumentExists(ctx context.Context, collection, documentId string) (bool, error) {
+	reference := s.FirestoreClient.Collection(collection).Doc(documentId)
+	snapshot, err := reference.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to find document: %w", err)
+	}
+	return snapshot.Exists(), nil
 }
