@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"time"
 
+	"cloud.google.com/go/firestore"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/internal/auth"
@@ -132,5 +133,82 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, document)
+	}
+}
+
+func HandleUpdateScoreCard(s *ScoreService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// parse user making request (they should be authZ'd to get here, just want data for logging)
+		user, err := auth.GetUserFromRequest(c.Request)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unable to parse user from request"})
+		}
+
+		// parse and validate the documentId
+		documentId := c.Param("documentId")
+		exists, err := s.Repository.CheckDocumentExists(c.Request.Context(), "board-game-scorecards", documentId)
+		if err != nil {
+			log.Printf("Error checking document existence: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check document existence"})
+			return
+		}
+		if !exists {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("Document with ID %s not found", documentId)})
+			return
+		}
+
+		// parse the request body into GameScorecardDocumentUpdate
+		var update GameScorecardDocumentUpdate
+		if err := c.ShouldBindJSON(&update); err != nil {
+			log.Printf("Error binding JSON: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+			return
+		}
+
+		// handle updates
+		var updates []firestore.Update
+		if update.Game != nil {
+			if !IsSupportedGame(Game(*update.Game)) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Unsupported game: %s", *update.Game)})
+				return
+			}
+			updates = append(updates, firestore.Update{Path: "game", Value: *update.Game})
+		}
+		if update.Date != nil {
+			*update.Date = helpers.TimeAsCalendarDateOnly(*update.Date)
+			updates = append(updates, firestore.Update{Path: "date", Value: *update.Date})
+		}
+		if update.IsCompleted != nil {
+			updates = append(updates, firestore.Update{Path: "is_completed", Value: *update.IsCompleted})
+		}
+		if update.Location != nil {
+			updates = append(updates, firestore.Update{Path: "location", Value: *update.Location})
+
+		}
+		if update.PlayerScores != nil {
+			// TODO (OC-24): pass through validation to ensure we have all the players and that each player score
+			// is valid, as if it was being passed through the LLM. To do this, I need to parse out
+			// the logic from GenerateGameScorecardDocumentFromText and
+			// put it into a function that can be called here.
+			updates = append(updates, firestore.Update{Path: "player_scores", Value: *update.PlayerScores})
+		}
+		if len(updates) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no updates provided"})
+			return
+		}
+
+		// add updated by and updated at
+		updates = append(updates, firestore.Update{Path: "updated_by", Value: user.Email})
+		updates = append(updates, firestore.Update{Path: "updated_at", Value: time.Now().In(time.UTC)})
+
+		// perform the update
+		_, err = s.Repository.FirestoreClient.Collection("board-game-scorecards").Doc(documentId).Update(c.Request.Context(), updates)
+		if err != nil {
+			log.Printf("Error updating document: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update scorecard"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Document updated successfully"})
 	}
 }

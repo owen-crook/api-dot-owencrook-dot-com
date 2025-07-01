@@ -29,4 +29,5 @@ func RegisterRoutes(cfg *config.Config, rg *gin.RouterGroup, service *ScoreServi
 
 	// mount admin routes
 	boardGameTrackerAuthZAdminGroup.POST("/parse-score-card/:game", HandleParseScoreCard(service))
+	boardGameTrackerAuthZAdminGroup.PATCH("/update-score-card/:documentId", HandleUpdateScoreCard(service))
 }
