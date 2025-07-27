@@ -1,11 +1,6 @@
 // Purpose:
 // Handles incoming HTTP requests and sends HTTP responses.
 // Acts as the controller layer in MVC terms.
-// What to include:
-// Gin handler functions (func(c *gin.Context)) for each endpoint, e.g., GetUser, CreateUser.
-// Input validation (request parameters, JSON bodies).
-// Call methods from the service layer to execute business logic.
-// Format responses and error handling.
 
 package boardgametracker
 
@@ -21,6 +16,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/internal/auth"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/helpers"
+	"github.com/owen-crook/board-game-tracker-go-common/pkg/documents"
+	"github.com/owen-crook/board-game-tracker-go-common/pkg/games"
 )
 
 func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
@@ -33,7 +30,7 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 
 		// parse and validate the game
 		game := c.Param("game")
-		if !IsSupportedGame(Game(game)) {
+		if !games.IsSupportedGame(games.Game(game)) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Unsupported game: %s", game)})
 		}
 
@@ -93,7 +90,7 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		}
 
 		// start building out metadata struct that we will upload no matter what
-		md := ImageUploadMetadata{
+		md := documents.ImageUploadCreate{
 			ID:                    uuid.New().String(),
 			GoogleCloudStorageUrl: url,
 			CreatedBy:             &user.Email,
@@ -101,7 +98,7 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		}
 
 		// send the request to Gemini
-		text, err := GetTextFromLLM(c.Request.Context(), s, Game(game), imgBytes)
+		text, err := GetTextFromLLM(c.Request.Context(), s, games.Game(game), imgBytes)
 		if err != nil {
 			log.Printf("LLM Text Parsing Error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -110,7 +107,7 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		}
 
 		// save the image upload metadata
-		err = s.Repository.SaveImageUploadMetadata(c.Request.Context(), &md)
+		err = s.Repository.SaveImageUpload(c.Request.Context(), &md)
 		if err != nil {
 			log.Printf("Image upload metadata error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -158,7 +155,7 @@ func HandleUpdateScoreCard(s *ScoreService) gin.HandlerFunc {
 		}
 
 		// parse the request body into GameScorecardDocumentUpdate
-		var update GameScorecardDocumentUpdate
+		var update documents.ScorecardDocumentUpdate
 		if err := c.ShouldBindJSON(&update); err != nil {
 			log.Printf("Error binding JSON: %v", err)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -168,7 +165,7 @@ func HandleUpdateScoreCard(s *ScoreService) gin.HandlerFunc {
 		// handle updates
 		var updates []firestore.Update
 		if update.Game != nil {
-			if !IsSupportedGame(Game(*update.Game)) {
+			if !games.IsSupportedGame(games.Game(*update.Game)) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Unsupported game: %s", *update.Game)})
 				return
 			}

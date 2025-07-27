@@ -1,11 +1,7 @@
 // Purpose:
-// Implements business logic of your application.
+// Implements business logic of application.
 // Validates, processes data, and orchestrates calls to repository and other services.
 // Does not handle HTTP or database directly.
-// What to include:
-// Functions like GetUserByID, CreateUser with core app rules.
-// Input/output transformations if needed.
-// Calls repository layer to get/save data.
 
 package boardgametracker
 
@@ -21,6 +17,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/gemini"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/helpers"
+	"github.com/owen-crook/board-game-tracker-go-common/pkg/documents"
+	"github.com/owen-crook/board-game-tracker-go-common/pkg/gamedata"
+	"github.com/owen-crook/board-game-tracker-go-common/pkg/games"
 )
 
 type ScoreService struct {
@@ -28,137 +27,20 @@ type ScoreService struct {
 	GeminiClient *gemini.Client
 }
 
-func GetSupportedGames() []Game {
-	return []Game{Wingspan, Wyrmspan}
-}
-
-func IsSupportedGame(game Game) bool {
-	for _, supportedGame := range GetSupportedGames() {
-		if supportedGame == game {
-			return true
-		}
-	}
-	return false
-}
-
-func GetScoringCategoriesByGame(game Game) ([]ScoringCategory, error) {
-	if !IsSupportedGame(game) {
-		return nil, fmt.Errorf("invalid game: %s", game)
-	}
-	switch game {
-	case Wyrmspan:
-		return WyrmspanScoringCategories, nil
-	case Wingspan:
-		return WingspanScoringCategories, nil
-	default:
-		return nil, fmt.Errorf("unable to find scoring categories for game: %s", game)
-	}
-}
-
-func GetScorecardGeometryByGame(game Game) (string, error) {
-	if !IsSupportedGame(game) {
-		return "", fmt.Errorf("invalid game: %s", game)
-	}
-	switch game {
-	case Wyrmspan, Wingspan:
-		return "The rows of the scorecard represent score categories and the columns represent different players of that game. The values at each row and column represent the score a given player acheived for that category. ", nil
-	default:
-		return "", fmt.Errorf("unable to find scorecard geometry for game: %s", game)
-	}
-}
-
-func GetExampleJsonByGame(game Game) (map[string]interface{}, error) {
-	if !IsSupportedGame(game) {
-		return nil, fmt.Errorf("invalid game: %s", game)
-	}
-	switch game {
-	case Wyrmspan:
-		return map[string]interface{}{
-			"date":     "2025-06-22",
-			"location": "minty",
-			"players": []map[string]interface{}{
-				{
-					"name":                    "SM",
-					"markers-on-dragon-guild": 3,
-					"tails-on-dragons":        32,
-					"end-game-abilities":      13,
-					"eggs":                    12,
-					"cached-resources":        1,
-					"tucked-cards":            5,
-					"public-objectives":       15,
-					"remaining-coins-items":   0,
-					"total":                   81,
-				},
-				{
-					"name":                    "WS",
-					"markers-on-dragon-guild": 7,
-					"tails-on-dragons":        24,
-					"end-game-abilities":      16,
-					"eggs":                    12,
-					"cached-resources":        7,
-					"tucked-cards":            6,
-					"public-objectives":       9,
-					"remaining-coins-items":   1,
-					"total":                   82,
-				},
-			},
-		}, nil
-	case Wingspan:
-		return map[string]interface{}{
-			"date":     "2025-06-23",
-			"location": "crook nook",
-			"players": []map[string]interface{}{
-				{
-					"name":               "OC",
-					"birds":              31,
-					"bonus-cards":        10,
-					"end-of-round-goals": 18,
-					"eggs":               18,
-					"food-on-cards":      5,
-					"tucked-cards":       2,
-					"total":              84,
-				},
-				{
-					"name":               "JB",
-					"birds":              49,
-					"bonus-cards":        4,
-					"end-of-round-goals": 17,
-					"eggs":               9,
-					"food-on-cards":      4,
-					"tucked-cards":       7,
-					"total":              90,
-				},
-				{
-					"name":               "MS",
-					"birds":              34,
-					"bonus-cards":        11,
-					"end-of-round-goals": 13,
-					"eggs":               6,
-					"food-on-cards":      2,
-					"tucked-cards":       1,
-					"total":              67,
-				},
-			},
-		}, nil
-	default:
-		return nil, fmt.Errorf("unable to find example json for game: %s", game)
-	}
-}
-
-func GetTextFromLLM(ctx context.Context, service *ScoreService, game Game, image []byte) (string, error) {
+func GetTextFromLLM(ctx context.Context, service *ScoreService, game games.Game, image []byte) (string, error) {
 	// grab standard prompt elements from critical functions to support
 	// dynamic generate of the prompt
-	categories, err := GetScoringCategoriesByGame(game)
+	categories, err := gamedata.GetScoringCategoriesByGame(game)
 	if err != nil {
 		return "", err
 	}
 
-	scorecardGeometry, err := GetScorecardGeometryByGame(game)
+	scorecardGeometry, err := gamedata.GetScorecardGeometryByGame(game)
 	if err != nil {
 		return "", err
 	}
 
-	exampleJson, err := GetExampleJsonByGame(game)
+	exampleJson, err := gamedata.GetExampleJsonByGame(game)
 	if err != nil {
 		return "", err
 	}
@@ -191,7 +73,7 @@ func GetTextFromLLM(ctx context.Context, service *ScoreService, game Game, image
 	return text, nil
 }
 
-func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetadataId, creator, game, text string, submittedDate time.Time, service *ScoreService) (*GameScorecardDocument, error) {
+func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetadataId, creator, game, text string, submittedDate time.Time, service *ScoreService) (*documents.ScorecardDocumentCreate, error) {
 	// initialize final vars
 	var id string
 	var finalDate time.Time
@@ -262,7 +144,7 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 	}
 
 	// determine expected columns on the players scores
-	categories, err := GetScoringCategoriesByGame(Game(game))
+	categories, err := gamedata.GetScoringCategoriesByGame(games.Game(game))
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +238,7 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 		}
 	}
 
-	return &GameScorecardDocument{
+	return &documents.ScorecardDocumentCreate{
 		ID:                    id,
 		ImageUploadMetadataID: imageUploadMetadataId,
 		Game:                  game,
