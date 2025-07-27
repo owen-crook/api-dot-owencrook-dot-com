@@ -1,10 +1,6 @@
 // Purpose:
 // Handles data persistence and retrieval from databases or external APIs.
 // Abstracts the storage details from the rest of the app.
-// What to include:
-// Functions like FindUserByID, SaveUser, DeleteUser.
-// Calls to Firestore (or your chosen DB client).
-// Manages DB queries and error handling.
 
 package boardgametracker
 
@@ -19,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/gcs"
 	"github.com/owen-crook/api-dot-owencrook-dot-com/pkg/helpers"
+	"github.com/owen-crook/board-game-tracker-go-common/pkg/documents"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -53,12 +50,12 @@ func (s *Storage) SaveImage(ctx context.Context, image []byte, contentType strin
 	return res, nil
 }
 
-func (s *Storage) SaveImageUploadMetadata(ctx context.Context, metadata *ImageUploadMetadata) error {
+func (s *Storage) SaveImageUpload(ctx context.Context, metadata *documents.ImageUploadCreate) error {
 	_, err := s.FirestoreClient.Collection("board-game-image-uploads").Doc(metadata.ID).Set(ctx, metadata)
 	return err
 }
 
-func (s *Storage) SaveGameScorecardDocument(ctx context.Context, doc *GameScorecardDocument) error {
+func (s *Storage) SaveGameScorecardDocument(ctx context.Context, doc *documents.ScorecardDocumentCreate) error {
 	_, err := s.FirestoreClient.Collection("board-game-scorecards").Doc(doc.ID).Set(ctx, doc)
 	return err
 }

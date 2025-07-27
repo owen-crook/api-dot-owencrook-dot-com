@@ -1,9 +1,6 @@
 // Purpose:
 // Registers all HTTP routes related to the user API.
 // Keeps route definitions separate for clarity and modularity.
-// What to include:
-// A function like RegisterRoutes(*gin.RouterGroup) that attaches handlers to endpoints.
-// Grouping routes under /user or similar path.
 
 package boardgametracker
 
