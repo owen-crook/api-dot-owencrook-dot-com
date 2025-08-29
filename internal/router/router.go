@@ -51,7 +51,7 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 		log.Fatalf("failed to initialize Firestore: %v", err)
 	}
 
-	googleCloudStorageClient, err := gcs.NewGCSClient(ctx, "owencrook-dot-com")
+	googleCloudStorageClient, err := gcs.NewGCSClient(ctx)
 	if err != nil {
 		log.Fatalf("failed to initialize GCS: %v", err)
 	}

@@ -83,7 +83,7 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		}
 
 		// save the file to GCS, getting back the url
-		url, err := s.Repository.SaveImage(c.Request.Context(), imgBytes, contentType)
+		bucket, path, err := s.Repository.SaveImage(c.Request.Context(), imgBytes, contentType)
 		if err != nil {
 			log.Printf("Image save error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -92,10 +92,11 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 
 		// start building out metadata struct that we will upload no matter what
 		md := documents.ImageUploadCreate{
-			ID:                    uuid.New().String(),
-			GoogleCloudStorageUrl: url,
-			CreatedBy:             &user.Email,
-			CreatedAt:             time.Now().In(time.UTC),
+			ID:        uuid.New().String(),
+			Bucket:    bucket,
+			Path:      path,
+			CreatedBy: &user.Email,
+			CreatedAt: time.Now().In(time.UTC),
 		}
 
 		// send the request to Gemini
@@ -124,14 +125,15 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 		documentCreate := documents.ScorecardDocumentCreate{
-			ID:           uuid.New().String(),
-			Game:         document.Game,
-			Date:         document.Date,
-			PlayerScores: document.PlayerScores,
-			Location:     document.Location,
-			IsCompleted:  document.IsCompleted,
-			CreatedBy:    &user.Email,
-			CreatedAt:    time.Now().In(time.UTC),
+			ID:                    uuid.New().String(),
+			ImageUploadMetadataID: document.ImageUploadMetadataID,
+			Game:                  document.Game,
+			Date:                  document.Date,
+			PlayerScores:          document.PlayerScores,
+			Location:              document.Location,
+			IsCompleted:           document.IsCompleted,
+			CreatedBy:             &user.Email,
+			CreatedAt:             time.Now().In(time.UTC),
 		}
 
 		// save the content to db
@@ -205,7 +207,7 @@ func HandleParseScoreCardFromImage(s *ScoreService) gin.HandlerFunc {
 		}
 
 		// save the file to GCS, getting back the url
-		url, err := s.Repository.SaveImage(c.Request.Context(), imgBytes, contentType)
+		bucket, path, err := s.Repository.SaveImage(c.Request.Context(), imgBytes, contentType)
 		if err != nil {
 			log.Printf("Image save error: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -214,10 +216,11 @@ func HandleParseScoreCardFromImage(s *ScoreService) gin.HandlerFunc {
 
 		// start building out metadata struct that we will upload no matter what
 		md := documents.ImageUploadCreate{
-			ID:                    uuid.New().String(),
-			GoogleCloudStorageUrl: url,
-			CreatedBy:             &user.Email,
-			CreatedAt:             time.Now().In(time.UTC),
+			ID:        uuid.New().String(),
+			Bucket:    bucket,
+			Path:      path,
+			CreatedBy: &user.Email,
+			CreatedAt: time.Now().In(time.UTC),
 		}
 
 		// send the request to Gemini
@@ -267,14 +270,15 @@ func HandleCreateScoreCard(s *ScoreService) gin.HandlerFunc {
 
 		// TODO: add proper validation beyond typing
 		documentCreate := documents.ScorecardDocumentCreate{
-			ID:           uuid.New().String(),
-			Game:         document.Game,
-			Date:         document.Date,
-			PlayerScores: document.PlayerScores,
-			Location:     document.Location,
-			IsCompleted:  document.IsCompleted,
-			CreatedBy:    &user.Email,
-			CreatedAt:    time.Now().In(time.UTC),
+			ID:                    uuid.New().String(),
+			ImageUploadMetadataID: document.ImageUploadMetadataID,
+			Game:                  document.Game,
+			Date:                  document.Date,
+			PlayerScores:          document.PlayerScores,
+			Location:              document.Location,
+			IsCompleted:           document.IsCompleted,
+			CreatedBy:             &user.Email,
+			CreatedAt:             time.Now().In(time.UTC),
 		}
 
 		// save the content to db
@@ -361,5 +365,22 @@ func HandleUpdateScoreCard(s *ScoreService) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "Document updated successfully"})
+	}
+}
+
+func HandleDeleteScoreCard(s *ScoreService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// parse user making request (they should be authZ'd to get here, just want data for logging)
+		_, err := auth.GetUserFromRequest(c.Request)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unable to parse user from request"})
+		}
+
+		err = DeleteGameScorecardAndMetadta(c.Request.Context(), s, c.Param("documentId"))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to delete scorecard %v", err.Error())})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "Document deleted successfully"})
 	}
 }
