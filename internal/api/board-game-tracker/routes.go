@@ -25,6 +25,8 @@ func RegisterRoutes(cfg *config.Config, rg *gin.RouterGroup, service *ScoreServi
 	})
 
 	// mount admin routes
-	boardGameTrackerAuthZAdminGroup.POST("/parse-score-card/:game", HandleParseScoreCard(service))
+	boardGameTrackerAuthZAdminGroup.POST("/parse-score-card/:game", HandleParseScoreCard(service)) // TODO: deprecate after UI release of OC-50
 	boardGameTrackerAuthZAdminGroup.PATCH("/update-score-card/:documentId", HandleUpdateScoreCard(service))
+	boardGameTrackerAuthZAdminGroup.POST("/parse-score-card-from-image/:game", HandleParseScoreCardFromImage(service))
+	boardGameTrackerAuthZAdminGroup.POST("/create-score-card/", HandleCreateScoreCard(service))
 }
