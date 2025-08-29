@@ -245,3 +245,67 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 		PlayerScores:          &playerScores,
 	}, nil
 }
+
+func DeleteGameScorecardAndMetadta(ctx context.Context, service *ScoreService, scorecardId string) error {
+	// validate the scorecardId
+	scorecardExists, err := service.Repository.CheckDocumentExists(ctx, "board-game-scorecards", scorecardId)
+	if err != nil {
+		log.Printf("Error checking document existence: %v", err)
+		return err
+	}
+	if !scorecardExists {
+		return fmt.Errorf("document with ID %s not found", scorecardId)
+	}
+
+	// fetch the scorecard to grab image upload id
+	scorecard, err := service.Repository.GetDocument(ctx, "board-game-scorecards", scorecardId)
+	if err != nil {
+		log.Printf("Error fetching scorecard: %v", err)
+		return err
+	}
+	var scorecardData documents.ScorecardDocumentCreate
+	if err := scorecard.DataTo(&scorecardData); err != nil {
+		log.Printf("Error converting scorecard data: %v", err)
+		return err
+	}
+
+	// fetch the image upload document to grab the image path
+	if scorecardData.ImageUploadMetadataID == "" {
+		return fmt.Errorf("image upload metadata ID is empty")
+	}
+	imageUploadMetadata, err := service.Repository.GetDocument(ctx, "board-game-image-uploads", scorecardData.ImageUploadMetadataID)
+	if err != nil {
+		log.Printf("Error fetching image upload metadata: %v", err)
+		return err
+	}
+	var imageUploadData documents.ImageUploadCreate
+	if err := imageUploadMetadata.DataTo(&imageUploadData); err != nil {
+		log.Printf("Error converting image upload metadata: %v", err)
+		return err
+	}
+
+	// delete the image from bucket
+	if imageUploadData.Bucket != "" && imageUploadData.Path != "" {
+		err := service.Repository.DeleteImage(ctx, imageUploadData.Path)
+		if err != nil {
+			log.Printf("Error deleting image from bucket: %v", err)
+			return err
+		}
+	}
+
+	// delete the image upload document
+	err = service.Repository.DeleteDocument(ctx, "board-game-image-uploads", scorecardData.ImageUploadMetadataID)
+	if err != nil {
+		log.Printf("Error deleting image upload document: %v", err)
+		return err
+	}
+
+	// delete the scorecard
+	err = service.Repository.DeleteDocument(ctx, "board-game-scorecards", scorecardId)
+	if err != nil {
+		log.Printf("Error deleting scorecard document: %v", err)
+		return err
+	}
+
+	return nil
+}

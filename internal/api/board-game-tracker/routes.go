@@ -29,4 +29,5 @@ func RegisterRoutes(cfg *config.Config, rg *gin.RouterGroup, service *ScoreServi
 	boardGameTrackerAuthZAdminGroup.PATCH("/update-score-card/:documentId", HandleUpdateScoreCard(service))
 	boardGameTrackerAuthZAdminGroup.POST("/parse-score-card-from-image/:game", HandleParseScoreCardFromImage(service))
 	boardGameTrackerAuthZAdminGroup.POST("/create-score-card/", HandleCreateScoreCard(service))
+	boardGameTrackerAuthZAdminGroup.DELETE("/delete-score-card/:documentId", HandleDeleteScoreCard(service))
 }
