@@ -20,6 +20,7 @@ import (
 	"github.com/owen-crook/board-game-tracker-go-common/pkg/games"
 )
 
+// TODO: deprecate after OC-50 is completed in the UI
 func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// parse user making request (they should be authZ'd to get here, just want data for logging)
@@ -122,14 +123,167 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
+		documentCreate := documents.ScorecardDocumentCreate{
+			ID:           uuid.New().String(),
+			Game:         document.Game,
+			Date:         document.Date,
+			PlayerScores: document.PlayerScores,
+			Location:     document.Location,
+			IsCompleted:  document.IsCompleted,
+			CreatedBy:    &user.Email,
+			CreatedAt:    time.Now().In(time.UTC),
+		}
 
 		// save the content to db
-		err = s.Repository.SaveGameScorecardDocument(c.Request.Context(), document)
+		err = s.Repository.SaveGameScorecardDocument(c.Request.Context(), &documentCreate)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+
+		c.JSON(http.StatusOK, documentCreate)
+	}
+}
+
+func HandleParseScoreCardFromImage(s *ScoreService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// parse user making request (they should be authZ'd to get here, just want data for logging)
+		user, err := auth.GetUserFromRequest(c.Request)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unable to parse user from request"})
+		}
+		// parse and validate the game
+		game := c.Param("game")
+		if !games.IsSupportedGame(games.Game(game)) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Unsupported game: %s", game)})
+		}
+
+		// parse image
+		c.Request.ParseMultipartForm(10 << 20) // 10MB
+		file, _, err := c.Request.FormFile("image")
+		if err != nil {
+			log.Printf("FormFile error: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "image is required"})
+			return
+		}
+		defer file.Close()
+
+		// parse the date, falling back to today
+		date := helpers.TimeAsCalendarDateOnly(time.Now())
+		dateStrFromRequest := c.PostForm("date")
+		if dateStrFromRequest != "" {
+			parsedDate, err := helpers.ParseFlexibleDate(dateStrFromRequest)
+			if err != nil {
+				log.Printf("Unable to parse date from request: %v", err)
+			} else {
+				date = helpers.TimeAsCalendarDateOnly(parsedDate)
+			}
+		}
+
+		// read first 512 bytes to detect content type
+		header := make([]byte, 512)
+		n, err := file.Read(header)
+		if err != nil {
+			log.Printf("Header error: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read image header"})
+			return
+		}
+
+		contentType := http.DetectContentType(header[:n])
+
+		// Rewind reader before full read
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			log.Printf("File rewinder error: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to rewind file"})
+			return
+		}
+
+		imgBytes, err := io.ReadAll(file)
+		if err != nil {
+			log.Printf("Image read error: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read image"})
+			return
+		}
+
+		// save the file to GCS, getting back the url
+		url, err := s.Repository.SaveImage(c.Request.Context(), imgBytes, contentType)
+		if err != nil {
+			log.Printf("Image save error: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// start building out metadata struct that we will upload no matter what
+		md := documents.ImageUploadCreate{
+			ID:                    uuid.New().String(),
+			GoogleCloudStorageUrl: url,
+			CreatedBy:             &user.Email,
+			CreatedAt:             time.Now().In(time.UTC),
+		}
+
+		// send the request to Gemini
+		text, err := GetTextFromLLM(c.Request.Context(), s, games.Game(game), imgBytes)
+		if err != nil {
+			log.Printf("LLM Text Parsing Error: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		} else {
+			md.LlmParsedContent = &text
+		}
+
+		// save the image upload metadata
+		err = s.Repository.SaveImageUpload(c.Request.Context(), &md)
+		if err != nil {
+			log.Printf("Image upload metadata error: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		// TODO: if GetTextFromLLM fails, we may want to exit the flow after we save
+		//       the metadata to prevent GenerateGameScorecardDocumentFromText from failing
+
+		// parse the content from the string into known struct
+		document, err := GenerateGameScorecardDocumentFromText(c.Request.Context(), md.ID, user.Email, game, text, date, s)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
 
 		c.JSON(http.StatusOK, document)
+	}
+}
+
+func HandleCreateScoreCard(s *ScoreService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// parse user making request (they should be authZ'd to get here, just want data for logging)
+		user, err := auth.GetUserFromRequest(c.Request)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unable to parse user from request"})
+		}
+
+		// parse request body
+		var document documents.ScorecardDocumentRaw
+		if err := c.ShouldBindJSON(&document); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+			return
+		}
+
+		// TODO: add proper validation beyond typing
+		documentCreate := documents.ScorecardDocumentCreate{
+			ID:           uuid.New().String(),
+			Game:         document.Game,
+			Date:         document.Date,
+			PlayerScores: document.PlayerScores,
+			Location:     document.Location,
+			IsCompleted:  document.IsCompleted,
+			CreatedBy:    &user.Email,
+			CreatedAt:    time.Now().In(time.UTC),
+		}
+
+		// save the content to db
+		err = s.Repository.SaveGameScorecardDocument(c.Request.Context(), &documentCreate)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+
+		c.JSON(http.StatusOK, documentCreate)
 	}
 }
 

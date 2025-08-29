@@ -73,9 +73,8 @@ func GetTextFromLLM(ctx context.Context, service *ScoreService, game games.Game,
 	return text, nil
 }
 
-func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetadataId, creator, game, text string, submittedDate time.Time, service *ScoreService) (*documents.ScorecardDocumentCreate, error) {
+func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetadataId, creator, game, text string, submittedDate time.Time, service *ScoreService) (*documents.ScorecardDocumentRaw, error) {
 	// initialize final vars
-	var id string
 	var finalDate time.Time
 	var parsedDate time.Time
 	var location string
@@ -86,7 +85,6 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 	allItemsInPlayerScoresValid := false
 
 	// set default values for required fields
-	id = uuid.New().String()
 	location = "unknown"
 	finalDate = submittedDate
 
@@ -238,15 +236,12 @@ func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetad
 		}
 	}
 
-	return &documents.ScorecardDocumentCreate{
-		ID:                    id,
+	return &documents.ScorecardDocumentRaw{
 		ImageUploadMetadataID: imageUploadMetadataId,
 		Game:                  game,
 		Date:                  finalDate,
 		IsCompleted:           foundPlayerScores && allItemsInPlayerScoresValid,
 		Location:              &location,
 		PlayerScores:          &playerScores,
-		CreatedBy:             &creator,
-		CreatedAt:             time.Now().In(time.UTC),
 	}, nil
 }
