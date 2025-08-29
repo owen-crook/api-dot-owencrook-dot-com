@@ -73,7 +73,7 @@ func GetTextFromLLM(ctx context.Context, service *ScoreService, game games.Game,
 	return text, nil
 }
 
-func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetadataId, creator, game, text string, submittedDate time.Time, service *ScoreService) (*documents.ScorecardDocumentRaw, error) {
+func GenerateGameScorecardDocumentFromText(ctx context.Context, imageUploadMetadataId, game, text string, submittedDate time.Time, service *ScoreService) (*documents.ScorecardDocumentRaw, error) {
 	// initialize final vars
 	var finalDate time.Time
 	var parsedDate time.Time

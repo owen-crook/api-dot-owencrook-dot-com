@@ -119,7 +119,7 @@ func HandleParseScoreCard(s *ScoreService) gin.HandlerFunc {
 		//       the metadata to prevent GenerateGameScorecardDocumentFromText from failing
 
 		// parse the content from the string into known struct
-		document, err := GenerateGameScorecardDocumentFromText(c.Request.Context(), md.ID, user.Email, game, text, date, s)
+		document, err := GenerateGameScorecardDocumentFromText(c.Request.Context(), md.ID, game, text, date, s)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
@@ -241,7 +241,7 @@ func HandleParseScoreCardFromImage(s *ScoreService) gin.HandlerFunc {
 		//       the metadata to prevent GenerateGameScorecardDocumentFromText from failing
 
 		// parse the content from the string into known struct
-		document, err := GenerateGameScorecardDocumentFromText(c.Request.Context(), md.ID, user.Email, game, text, date, s)
+		document, err := GenerateGameScorecardDocumentFromText(c.Request.Context(), md.ID, game, text, date, s)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		}
